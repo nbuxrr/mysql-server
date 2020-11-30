@@ -697,6 +697,10 @@ SET(SQL_SOURCE
   srv_session.cc
   srv_session_info_service.cc
   srv_session_service.cc
+  ae.c
+  ae_epoll.c
+  monotonic.c
+  zmalloc.c
   )
 
 IF(NOT WIN32)
