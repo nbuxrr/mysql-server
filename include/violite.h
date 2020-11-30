@@ -158,6 +158,11 @@ MYSQL_VIO vio_new_win32shared_memory(HANDLE handle_file_map, HANDLE handle_map,
 #define HANDLE void *
 #endif /* _WIN32 */
 
+#ifndef WORKLOAD_IN_EL
+#define WORKLOAD_IN_EL
+#endif
+
+
 void vio_delete(MYSQL_VIO vio);
 int vio_shutdown(MYSQL_VIO vio);
 bool vio_reset(MYSQL_VIO vio, enum enum_vio_type type, my_socket sd, void *ssl,

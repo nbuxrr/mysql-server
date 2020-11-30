@@ -4281,6 +4281,9 @@ class THD : public MDL_context_owner,
  public:
   bool is_system_user();
   void set_system_user(bool system_user_flag);
+
+ public:
+  struct aeEventLoop *el;
 };
 
 /**

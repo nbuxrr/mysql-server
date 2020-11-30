@@ -800,6 +800,10 @@ The documentation is based on the source files such as:
 #include "sql/server_component/persistent_dynamic_loader_imp.h"
 #include "sql/srv_session.h"
 
+#ifdef WORKLOAD_IN_EL
+#include "ae.h"
+#endif
+
 using std::max;
 using std::min;
 using std::vector;
@@ -1439,6 +1443,10 @@ char *opt_general_logname, *opt_slow_logname, *opt_bin_logname;
 bool expire_logs_days_supplied = false;
 bool binlog_expire_logs_seconds_supplied = false;
 /* Static variables */
+
+#ifdef WORKLOAD_IN_EL
+aeEventLoop *workload_el = nullptr;
+#endif
 
 static bool opt_myisam_log;
 static int cleanup_done;
@@ -3404,6 +3412,32 @@ extern "C" void *signal_hand(void *arg MY_ATTRIBUTE((unused))) {
 }
 
 #endif  // !_WIN32
+
+#ifdef WORKLOAD_IN_EL
+
+extern "C" void *workload_event_handler(void * /*arg*/) {
+  my_thread_init();
+  workload_el = aeCreateEventLoop(1024 /*TODO customizable*/);
+  aeMain(workload_el);
+
+  my_thread_end();
+  return 0;
+}
+
+extern "C" void setup_workload_el_handler_thread() {
+  my_thread_handle hThread;
+  DBUG_TRACE;
+
+  int error = mysql_thread_create(
+    0 /* key_thread_handle_workload_el */, &hThread, &connection_attrib,
+    workload_event_handler, nullptr);
+  
+  if (error) {
+    LogErr(WARNING_LEVEL, ER_CANT_CREATE_WORKLOAD_EL, error);
+  }
+}
+
+#endif // WORKLOAD_IN_EL
 
 /**
   All global error messages are sent here where the first one is stored
@@ -7179,6 +7213,11 @@ int mysqld_main(int argc, char **argv)
 #if defined(_WIN32)
   setup_conn_event_handler_threads();
 #else
+
+#ifdef WORKLOAD_IN_EL
+  setup_workload_el_handler_thread();
+#endif //WORKLOAD_IN_EL
+
   mysql_mutex_lock(&LOCK_socket_listener_active);
   // Make it possible for the signal handler to kill the listener.
   socket_listener_active = true;

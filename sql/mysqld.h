@@ -66,6 +66,10 @@
 #include "sql/sql_bitmap.h"
 #include "sql/sql_const.h"  // UUID_LENGTH
 
+#ifdef WORKLOAD_IN_EL
+#include "ae.h"
+#endif
+
 class Rpl_global_filter;
 class THD;
 class Time_zone;
@@ -394,6 +398,10 @@ extern thread_local MEM_ROOT **THR_MALLOC;
 
 extern PSI_file_key key_file_binlog_cache;
 extern PSI_file_key key_file_binlog_index_cache;
+
+#ifdef WORKLOAD_IN_EL
+extern aeEventLoop *workload_el;
+#endif
 
 #ifdef HAVE_PSI_INTERFACE
 

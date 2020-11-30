@@ -61,6 +61,7 @@
 #include "sql/sql_parse.h"             // do_command
 #include "sql/sql_thd_internal_api.h"  // thd_set_thread_stack
 #include "thr_mutex.h"
+#include "violite.h"
 
 // Initialize static members
 ulong Per_thread_connection_handler::blocked_pthread_count = 0;
@@ -242,6 +243,154 @@ static THD *init_new_thd(Channel_info *channel_info) {
 */
 
 extern "C" {
+#ifdef WORKLOAD_IN_EL
+
+// TODO stack over
+static void *command_thd(void *arg) {
+  THD *thd = (THD *)(param);
+  my_thread_init();
+  thd->store_globals();
+
+  do_command(thd);
+
+  // TODO error exit
+  int fd = thd->get_protocol_classic()->get_vio()->mysql_socket.fd;
+
+  aeApiAddEvent(thd->el, fd, AE_READABLE);
+  my_thread_end();
+  return 0;
+}
+
+void vio_el_socket_event_handler(struct aeEventLoop *el, int fd, void *clientData, int mask) {
+  // TODO: check thd error
+
+  if (mask & AE_READABLE) {
+    aeApiDelEvent(el, fd, AE_READABLE);
+    my_thread_handle id;
+    // int error = 
+      mysql_thread_create(key_thread_one_connection, &id, &connection_attrib,
+                          command_thd, clientData);
+  }
+}
+
+static void *handle_connection(void *arg) {
+  Global_THD_manager *thd_manager = Global_THD_manager::get_instance();
+  Connection_handler_manager *handler_manager =
+      Connection_handler_manager::get_instance();
+  Channel_info *channel_info = static_cast<Channel_info *>(arg);
+  bool pthread_reused MY_ATTRIBUTE((unused)) = false;
+
+  if (my_thread_init()) {
+    connection_errors_internal++;
+    channel_info->send_error_and_close_channel(ER_OUT_OF_RESOURCES, 0, false);
+    handler_manager->inc_aborted_connects();
+    Connection_handler_manager::dec_connection_count();
+    delete channel_info;
+    my_thread_exit(nullptr);
+    return nullptr;
+  }
+
+  for (;;) {
+    THD *thd = init_new_thd(channel_info);
+    if (thd == nullptr) {
+      connection_errors_internal++;
+      handler_manager->inc_aborted_connects();
+      Connection_handler_manager::dec_connection_count();
+      break;  // We are out of resources, no sense in continuing.
+    }
+
+#ifdef HAVE_PSI_THREAD_INTERFACE
+    if (pthread_reused) {
+      /*
+        Reusing existing pthread:
+        Create new instrumentation for the new THD job,
+        and attach it to this running pthread.
+      */
+      PSI_thread *psi = PSI_THREAD_CALL(new_thread)(key_thread_one_connection,
+                                                    thd, thd->thread_id());
+      PSI_THREAD_CALL(set_thread_os_id)(psi);
+      PSI_THREAD_CALL(set_thread)(psi);
+    }
+#endif
+
+#ifdef HAVE_PSI_THREAD_INTERFACE
+    /* Find the instrumented thread */
+    PSI_thread *psi = PSI_THREAD_CALL(get_thread)();
+    /* Save it within THD, so it can be inspected */
+    thd->set_psi(psi);
+#endif /* HAVE_PSI_THREAD_INTERFACE */
+    mysql_thread_set_psi_id(thd->thread_id());
+    mysql_thread_set_psi_THD(thd);
+    mysql_socket_set_thread_owner(
+        thd->get_protocol_classic()->get_vio()->mysql_socket);
+
+    thd_manager->add_thd(thd);
+
+    bool login_failed = thd_prepare_connection(thd);
+
+    if (login_failed)
+      handler_manager->inc_aborted_connects();
+    else {
+      thd->el = workload_el;
+      int sock = socker.fd;
+      login_failed = (AE_OK != aeCreateEventLoop(workload_el, sock,
+        AE_READABLE | AE_WRITABLE, vio_el_socket_event_handler, thd));
+      
+      if (login_failed) {
+        end_connection(thd);
+      }
+    }
+
+    if (login_failed) {
+      close_connection(thd, 0, false, false);
+
+      thd->get_stmt_da()->reset_diagnostics_area();
+      thd->release_resources();
+
+      // Clean up errors now, before possibly waiting for a new connection.
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+      ERR_remove_thread_state(0);
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+      thd_manager->remove_thd(thd);
+      Connection_handler_manager::dec_connection_count();
+
+#ifdef HAVE_PSI_THREAD_INTERFACE
+      /*
+        Delete the instrumentation for the job that just completed.
+      */
+      thd->set_psi(nullptr);
+      PSI_THREAD_CALL(delete_current_thread)();
+#endif /* HAVE_PSI_THREAD_INTERFACE */
+
+      delete thd;
+    }
+
+    break;
+    // TODO reuse the thread
+
+    // Server is shutting down so end the pthread.
+    if (connection_events_loop_aborted()) break;
+
+    channel_info = Per_thread_connection_handler::block_until_new_connection();
+    if (channel_info == nullptr) break;
+    pthread_reused = true;
+    if (connection_events_loop_aborted()) {
+      // Close the channel and exit as server is undergoing shutdown.
+      channel_info->send_error_and_close_channel(ER_SERVER_SHUTDOWN, 0, false);
+      delete channel_info;
+      channel_info = nullptr;
+      Connection_handler_manager::dec_connection_count();
+      break;
+    }
+  }
+
+  my_thread_end();
+  my_thread_exit(nullptr);
+  return nullptr;
+}
+
+#else
+
 static void *handle_connection(void *arg) {
   Global_THD_manager *thd_manager = Global_THD_manager::get_instance();
   Connection_handler_manager *handler_manager =
@@ -345,6 +494,8 @@ static void *handle_connection(void *arg) {
   my_thread_exit(nullptr);
   return nullptr;
 }
+
+#endif // WORKLOAD_IN_EL
 }  // extern "C"
 
 void Per_thread_connection_handler::modify_thread_cache_size(

@@ -60,6 +60,10 @@
 /* Macros */
 #define AE_NOTUSED(V) ((void) V)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct aeEventLoop;
 
 /* Types and data structures */
@@ -111,7 +115,9 @@ typedef struct aeEventLoop {
 } aeEventLoop;
 
 /* Prototypes */
-aeEventLoop *aeCreateEventLoop(int setsize);
+extern aeEventLoop *aeCreateEventLoop(int setsize);
+extern int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask);
+extern void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask);
 void aeDeleteEventLoop(aeEventLoop *eventLoop);
 void aeStop(aeEventLoop *eventLoop);
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
@@ -124,12 +130,16 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
 int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id);
 int aeProcessEvents(aeEventLoop *eventLoop, int flags);
 int aeWait(int fd, int mask, long long milliseconds);
-void aeMain(aeEventLoop *eventLoop);
-char *aeGetApiName(void);
+extern void aeMain(aeEventLoop *eventLoop);
+const char *aeGetApiName(void);
 void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep);
 void aeSetAfterSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *aftersleep);
 int aeGetSetSize(aeEventLoop *eventLoop);
 int aeResizeSetSize(aeEventLoop *eventLoop, int setsize);
 void aeSetDontWait(aeEventLoop *eventLoop, int noWait);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif
