@@ -247,7 +247,7 @@ extern "C" {
 
 // TODO stack over
 static void *command_thd(void *arg) {
-  THD *thd = (THD *)(param);
+  THD *thd = (THD *)(arg);
   my_thread_init();
   thd->store_globals();
 
@@ -321,8 +321,8 @@ static void *handle_connection(void *arg) {
 #endif /* HAVE_PSI_THREAD_INTERFACE */
     mysql_thread_set_psi_id(thd->thread_id());
     mysql_thread_set_psi_THD(thd);
-    mysql_socket_set_thread_owner(
-        thd->get_protocol_classic()->get_vio()->mysql_socket);
+    MYSQL_SOCKET socket = thd->get_protocol_classic()->get_vio()->mysql_socket
+    mysql_socket_set_thread_owner(socket);
 
     thd_manager->add_thd(thd);
 
@@ -332,9 +332,8 @@ static void *handle_connection(void *arg) {
       handler_manager->inc_aborted_connects();
     else {
       thd->el = workload_el;
-      int sock = socker.fd;
-      login_failed = (AE_OK != aeCreateEventLoop(workload_el, sock,
-        AE_READABLE | AE_WRITABLE, vio_el_socket_event_handler, thd));
+      login_failed = (AE_OK != aeCreateFileEvent(workload_el, socket.fd,
+        AE_READABLE, vio_el_socket_event_handler, thd));
       
       if (login_failed) {
         end_connection(thd);

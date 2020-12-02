@@ -93,7 +93,7 @@ int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *reside
 void set_jemalloc_bg_thread(int enable);
 int jemalloc_purge();
 size_t zmalloc_get_private_dirty(long pid);
-size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
+size_t zmalloc_get_smap_bytes_by_field(const char *field, long pid);
 size_t zmalloc_get_memory_size(void);
 void zlibc_free(void *ptr);
 

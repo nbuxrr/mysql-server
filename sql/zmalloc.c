@@ -132,19 +132,19 @@ void zfree_no_tcache(void *ptr) {
 }
 #endif
 
-void *zcalloc(size_t size) {
-    void *ptr = calloc(1, size+PREFIX_SIZE);
-
-    if (!ptr) zmalloc_oom_handler(size);
-#ifdef HAVE_MALLOC_SIZE
-    update_zmalloc_stat_alloc(zmalloc_size(ptr));
-    return ptr;
-#else
-    *((size_t*)ptr) = size;
-    update_zmalloc_stat_alloc(size+PREFIX_SIZE);
-    return (char*)ptr+PREFIX_SIZE;
-#endif
-}
+// void *zcalloc(size_t size) {
+//     void *ptr = calloc(1, size+PREFIX_SIZE);
+//
+//     if (!ptr) zmalloc_oom_handler(size);
+// #ifdef HAVE_MALLOC_SIZE
+//     update_zmalloc_stat_alloc(zmalloc_size(ptr));
+//     return ptr;
+// #else
+//     *((size_t*)ptr) = size;
+//     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
+//     return (char*)ptr+PREFIX_SIZE;
+// #endif
+// }
 
 /* Similar to zcalloc, '*usable' is set to the usable size. */
 void *zcalloc_usable(size_t size, size_t *usable) {
@@ -502,7 +502,7 @@ int jemalloc_purge() {
  * Example: zmalloc_get_smap_bytes_by_field("Rss:",-1);
  */
 #if defined(HAVE_PROC_SMAPS)
-size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
+size_t zmalloc_get_smap_bytes_by_field(const char *field, long pid) {
     char line[1024];
     size_t bytes = 0;
     int flen = strlen(field);
@@ -537,7 +537,7 @@ size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
  * Note that AnonHugePages is a no-op as THP feature
  * is not supported in this platform
  */
-size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
+size_t zmalloc_get_smap_bytes_by_field(const char *field, long pid) {
 #if defined(__APPLE__)
     struct proc_regioninfo pri;
     if (proc_pidinfo(pid, PROC_PIDREGIONINFO, 0, &pri, PROC_PIDREGIONINFO_SIZE) ==

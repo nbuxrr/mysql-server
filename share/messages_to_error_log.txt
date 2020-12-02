@@ -365,6 +365,9 @@ ER_SEC_FILE_PRIV_ARGUMENT_TOO_LONG
 ER_CANT_CREATE_NAMED_PIPES_THREAD
   eng "Can't create thread to handle named pipes (errno= %d)"
 
+ER_CANT_CREATE_WORKLOAD_EL
+  eng "Can't create thread for workload event loop"
+
 ER_CANT_CREATE_TCPIP_THREAD
   eng "Can't create thread to handle TCP/IP (errno= %d)"
 
